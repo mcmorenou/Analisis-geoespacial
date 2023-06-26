@@ -1,1 +1,109 @@
 https://code.earthengine.google.com/10170e3928125b8efa7e525cd95b57dd
+
+
+var imageCollection = ee.ImageCollection("LANDSAT/LC08/C02/T1_TOA"),
+    Esideam = ee.FeatureCollection("users/mcmorenou/Estaciones_IDEAM"),
+    andes = ee.FeatureCollection("users/mcmorenou/andes");
+
+// Agregar la capa de "andes" al mapa
+Map.addLayer(andes, {}, 'andes');
+
+// Centrar el mapa en la región de "andes" con un nivel de zoom mayor
+Map.centerObject(andes, 12);
+
+// Filtrar la tabla de acuerdo a la categoría "LM"
+var tablaFiltradaLM = Esideam.filter(ee.Filter.eq('CATEGORIA', 'LM'));
+
+// Filtrar la tabla para que esté dentro de la región de "andes"
+var tablaFiltrada = tablaFiltradaLM.filterBounds(andes);
+
+// Obtener la geometría de "andes"
+var geometriaAndes = andes.geometry();
+
+// Simplificar la geometría de "andes"
+var geometriaSimplificada = geometriaAndes.simplify(500);
+
+// Definir el rango de años para el análisis
+var startYear = 2013;
+var endYear = 2022;
+
+// Definir la paleta de colores para visualizar el NDVI
+var ndviVis = {
+  min: -1,
+  max: 1,
+  palette: ['FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718',
+'74A901', '66A000','529400','3E8601','207401','056201','004C44',
+'023B01','012E01','011D01','011301']
+};
+
+// Iterar sobre los años
+for (var year = startYear; year <= endYear; year++) {
+  // Especificar las fechas de las imágenes para el año actual
+  var fechaInicio = year + '-01-01';
+  var fechaFin = year + '-12-31';
+
+  // Filtrar la colección de imágenes de Landsat para el año actual
+  var coleccionLandsat = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+    .filterBounds(geometriaSimplificada)
+    .filterMetadata('CLOUD_COVER', 'less_than', 50)
+    .filterDate(fechaInicio, fechaFin);
+
+  // Aplicar el recorte a la colección de imágenes de Landsat
+  var coleccionRecortada = coleccionLandsat.map(function(imagen) {
+    // Enmascarar las áreas fuera del polígono "andes"
+    var enmascarada = imagen.updateMask(imagen.clip(andes).gt(0));
+    return enmascarada;
+  });
+
+  // Aplicar factores de escala.
+  function applyScaleFactors(image) {
+    var opticalBands = image.select(['SR_B5', 'SR_B4']).multiply(0.0000275).add(-0.2);
+    var thermalBands = image.select('ST_B10').multiply(0.00341802).add(149.0);
+    return image.addBands(opticalBands, null, true)
+                .addBands(thermalBands, null, true);
+  }
+
+  coleccionRecortada = coleccionRecortada.map(applyScaleFactors);
+
+  // Calcular el Índice de Vegetación Normalizado (NDVI)
+  var ndviCollection = coleccionRecortada.map(function(image) {
+    var ndvi = image.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI');
+    return image.addBands(ndvi);
+  });
+
+  // Calcular el Índice de Vegetación Normalizado (NDVI) para la imagen del año actual
+  var ndviImageYear = ee.Image(ndviCollection.filterDate(year + '-01-01', year + '-12-31').median())
+    .normalizedDifference(['SR_B5', 'SR_B4'])
+    .rename('NDVI');
+
+  // Visualizar el NDVI del año actual
+  Map.addLayer(ndviImageYear, ndviVis, 'NDVI ' + year);
+
+  // Reducir la región de interés a un área más pequeña
+  var regionReducida = geometriaAndes.bounds().simplify(5000);
+
+  // Reducir la resolución de la imagen
+  var escalaReducida = 100;
+
+  // Descargar la imagen como un archivo GeoTIFF con la región y escala reducidas
+  Export.image.toDrive({
+    image: ndviImageYear.visualize({ min: -1, max: 1, palette: ['ff4e31', 'fdff99', '65ff33', '179315', '4630be']
+  }),
+    description: 'NDVI_' + year,
+    folder: 'NDVI_Images',
+    scale: 90,
+    region: geometriaAndes,
+    fileFormat: 'GeoTIFF'
+  });
+
+  // Exportar la tabla filtrada como un archivo shapefile
+  Export.table.toDrive({
+    collection: ndviImageYear.visualize({ min: -1, max: 1, palette: ['ff4e31', 'fdff99', '65ff33', '179315', '4630be'] }),
+    description: 'Tabla_Filtrada_' + year,
+    folder: 'Tabla_Filtrada',
+    fileFormat: 'SHP'
+  });
+}
+
+// Agregar la capa de la tabla filtrada al mapa
+Map.addLayer(tablaFiltrada, {}, 'tablaFiltrada');
