@@ -1,9 +1,10 @@
-https://code.earthengine.google.com/10170e3928125b8efa7e525cd95b57dd
+https://code.earthengine.google.com/38455854ddccd3bcd913d057c89a7211
 
 
 var imageCollection = ee.ImageCollection("LANDSAT/LC08/C02/T1_TOA"),
     Esideam = ee.FeatureCollection("users/mcmorenou/Estaciones_IDEAM"),
     andes = ee.FeatureCollection("users/mcmorenou/andes");
+
 
 // Agregar la capa de "andes" al mapa
 Map.addLayer(andes, {}, 'andes');
@@ -29,12 +30,15 @@ var endYear = 2022;
 
 // Definir la paleta de colores para visualizar el NDVI
 var ndviVis = {
-  min: -1,
+  min: 0,
   max: 1,
-  palette: ['FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718',
-'74A901', '66A000','529400','3E8601','207401','056201','004C44',
-'023B01','012E01','011D01','011301']
+  palette: [
+    'ffffff', 'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901',
+    '66a000', '529400', '3e8601', '207401', '056201', '004c00', '023b01',
+    '012e01', '011d01', '011301']
 };
+
+
 
 // Iterar sobre los años
 for (var year = startYear; year <= endYear; year++) {
@@ -86,9 +90,7 @@ for (var year = startYear; year <= endYear; year++) {
   var escalaReducida = 100;
 
   // Descargar la imagen como un archivo GeoTIFF con la región y escala reducidas
-  Export.image.toDrive({
-    image: ndviImageYear.visualize({ min: -1, max: 1, palette: ['ff4e31', 'fdff99', '65ff33', '179315', '4630be']
-  }),
+  Export.image.toDrive({image: ndviImageYear,
     description: 'NDVI_' + year,
     folder: 'NDVI_Images',
     scale: 90,
@@ -98,12 +100,9 @@ for (var year = startYear; year <= endYear; year++) {
 
   // Exportar la tabla filtrada como un archivo shapefile
   Export.table.toDrive({
-    collection: ndviImageYear.visualize({ min: -1, max: 1, palette: ['ff4e31', 'fdff99', '65ff33', '179315', '4630be'] }),
+    collection: ndviImageYear,
     description: 'Tabla_Filtrada_' + year,
     folder: 'Tabla_Filtrada',
-    fileFormat: 'SHP'
+    fileFormat: 'CSV'
   });
 }
-
-// Agregar la capa de la tabla filtrada al mapa
-Map.addLayer(tablaFiltrada, {}, 'tablaFiltrada');
